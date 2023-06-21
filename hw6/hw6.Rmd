@@ -1,0 +1,110 @@
+---
+title: 'STA 141A Fall 2022: Homework 1'
+author: 'Camden Possinger'
+date: ""
+output:
+  html_document:
+    number_sections: yes
+---
+# K-Means
+
+a) [12 Points] Implement a function `kmeans` that takes as arguments `data`, `k` and a default argument `maxiter = 20`. 
+It should return the clustering of a K-means cluster algorithm after at most `maxiter` iterations. Break the loop if no changes are made before `maxiter` is reached. Use `euclid` as the metric which determines the within-cluster variation. 
+
+`kmeans` shall return a list of two elements: First, a vector of clusters. Second, a list of cluster centroids at each iteration. 
+
+```{r}
+library(purrr)
+library(dplyr)
+
+kmeans <- function(data, k, maxiter = 20) {
+  set.seed(123)
+
+  euclid <- function(x, y) sqrt(sum((x - y)^2))
+
+  closest_mean <- function(x, y, means) {
+    means %>%
+      pmap(~ euclid(c(x, y), c(..1, ..2))) %>%
+      which.min()
+  }
+
+  find_kmeans <- function(old_clust = c(), new_clust, mean_lst = list(), i = 1, maxiter) {
+    old_clust <- new_clust
+
+    means <- data %>%
+      split(new_clust) %>%
+      map_df(~ colMeans(.x))
+
+    mean_lst <- append(mean_lst, list(means))
+
+    new_clust <- data %>% pmap_int(~ closest_mean(..1, ..2, means))
+
+    if (all(old_clust == new_clust) || i == maxiter) {
+      return(list(clusters = new_clust, means = mean_lst, i = i))
+    }
+
+    i <- i + 1
+
+    find_kmeans(old_clust, new_clust, mean_lst, i, maxiter)
+  }
+
+  find_kmeans(new_clust = sample(1:k, nrow(data), replace = T), maxiter = maxiter)
+}
+```
+
+
+b) Run `kmeans(datasets::faithful, 4)`. Create a plot that shows the first and last cluster centroids. Use grey arrays to connect these centroids, taking into account all iterations in between. The plot should correspond to my plot for `k = 5`. 
+
+```{r}
+kmeans(datasets::faithful, 4)
+```
+
+```{r}
+library(ggplot2)
+
+i <- kmeans(datasets::faithful, 4)$i
+
+means <- kmeans(datasets::faithful, 4)$means %>%
+  bind_rows(.id = "i") %>%
+  mutate(i = as.integer(i))
+
+mean_segment <- 1:(i - 1) %>%
+  map(function(ind) {
+    ind <- ind %>% as.integer()
+    data.frame(
+      x = means %>% filter(i == ind) %>% pull(eruptions),
+      y = means %>% filter(i == ind) %>% pull(waiting),
+      xend = means %>% filter(i == ind + 1) %>% pull(eruptions),
+      yend = means %>% filter(i == ind + 1) %>% pull(waiting)
+    )
+  }) %>%
+  map(~ geom_segment(
+    data = .x, aes(x = x, y = y, xend = xend, yend = yend),
+    arrow = arrow(length = unit(1, "mm")),
+    color = "grey"
+  ))
+
+clusters <- cbind(datasets::faithful,
+  clusters = kmeans(datasets::faithful, 4)$clusters
+)
+
+mean_plot <- ggplot() +
+  geom_point(
+    data = clusters,
+    aes(
+      x = eruptions,
+      y = waiting,
+      color = factor(clusters)
+    )
+  ) +
+  geom_point(
+    data = means %>% filter(i == min(i) | i == max(i)),
+    aes(x = eruptions, waiting)
+  ) +
+  labs(color = "cluster")
+
+mean_plot$layers <- mean_plot$layers %>% append(mean_segment)
+mean_plot
+```
+
+

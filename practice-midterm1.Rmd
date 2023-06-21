@@ -1,0 +1,147 @@
+---
+title: 'STA 141A Fall 2022: Practice Midterm Exam 1'
+author: ''
+output:
+  html_document
+---
+
+
+For this exam you are only allowed to use a pen and a three-page cheat sheet. The total number of points is 30. Do not forget to write your name and your student ID number.
+
+Name: \hspace{2.5in} Student ID:
+
+
+### Data Objects
+
+1. (2 points) What is the result of the following R code?
+  
+  ```{r}
+X <- matrix(c(1:6), nrow = 3, ncol = 2)
+(X[X[, 2] > 4, 1])
+```
+<!-- The vector (2, 3) -->
+  
+  \vspace{60pt}
+
+2. (2 points) Explain the differences between a matrix and a data frame.
+<!-- Matrices can only contain one type of variables; 
+not possible to use attach() with matrices; 
+cannot select the columns of a matrix using the dollar sign; 
+not possible to multiply two data frames using matrix multiplication. -->
+  
+  \vspace{60pt}
+
+3. (2 points) Write an `R` code that sums the elements of the matrix `A` by row.
+```{r}
+A <- matrix(1:10000, 100, 100)
+```
+
+<!-- rowSums(A)  -->
+  
+  \vspace{60pt}
+
+4. (2 points) Write down the result of the following `R` code.
+```{r results = 'hide'}
+x <- c(2, 2, 1, 1, 7, 1, 3, 2, 1, 7)
+y <- c(rep("High", 5), rep("Low", 5))
+table(x, y)
+```
+
+\vspace{60pt}
+
+5. (2 points) Write an R code that, given a vector x with numerical values, 
+   creates a vector y with entries equal to big (a character string) 
+   if the corresponding entry of x is greater than 100, and small (a character string) otherwise. 
+   Use the `ifelse()` function to do so.
+
+   ```{r}
+
+library(magrittr)
+num_vec <- function(num_vec) {
+  num_vec %<>% na.omit
+  num_vec %>% sapply(function(x) {
+    ifelse(x > 100, "Big", "Small")
+  })
+}
+
+c(1, 200, 3, NA) %>% num_vec()
+```
+
+\vspace{60pt}
+
+
+## Repetitive execution
+
+(4 points) Write down the result of the following R code
+
+```{r results = 'hide'}
+x <- data.frame(X1 = 1:3, X2 = c(1.2, 3.0, 1.5), X2 = c(1.2, 3.0, 1.5), X3 = c("P", "Q", "R"))
+
+sapply(1:dim(x)[1], function(i) {
+  return(list(x[i, 2], paste(x[i, 1], x[i, 3], sep = "?")))
+})
+```
+
+\vspace{60pt}
+
+(4 points) In words, explain what the following code does
+
+```{r, results="hide"}
+rm(list = ls())
+set.seed(1)
+repetitions <- 1000
+urn <- c(1:100)
+trials_total <- 0
+
+for (i in 1:repetitions) {
+  num <- 0
+  trials <- 0
+  while (num != 55) {
+    num <- sample(urn, 1, replace = FALSE)
+    trials <- trials + 1
+  }
+  trials_total <- trials_total + trials
+}
+
+trials_total / repetitions
+```
+
+\vspace{60pt}
+
+\newpage
+
+## Functions
+
+(4 points) Write a function called `descr_stats()` that takes a numeric vector and returns a vector of length 2 containing the sum of the numbers in the vector, the sample mean of the vector and the sample variance of the vector. Make sure that the function can return a number even if the vector contain NAs.
+
+\vspace{120pt}
+
+
+
+## Data Visualization 
+
+1. (3 points) Describe what kind of a plot the following `R` code creates.
+
+```{r fig.show = 'hide'}
+library(ggplot2)
+ggplot(data = mpg, aes(x = displ, y = hwy)) +
+  geom_point(mapping = aes(colour = class))
+```
+
+
+
+\vspace{120pt}
+
+2. (5 points) Describe what kind of a plot the following `R` code creates.
+```{r fig.show = 'hide'}
+library(ggplot2)
+ggplot(data = mpg, aes(x = displ, y = hwy)) +
+  geom_point(mapping = aes(colour = class)) +
+  geom_text(data = mpg[mpg$hwy > 35, ], aes(x = displ, y = hwy, label = manufacturer))
+```
+
+<!-- It creates a scatterplot where each point is colored according to its class and where the manufacturers of the cars with hwy > 35 are displayed.  -->
+
+
+\vspace{120pt}
+

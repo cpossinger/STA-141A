@@ -1,0 +1,435 @@
+---
+title: 'STA 141A Fall 2022: Homework 2'
+author: 'Camden Possinger'
+date: "`r format(Sys.time(), '%m/%d/%y')`"
+output:
+  html_document:
+    number_sections: no
+  pdf_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+# 1. Examining the distribution of the data
+
+1.  Read the data into R. Add to the data frame a new binary variable
+    good which is 1 if quality \> 5 and 0 otherwise (1 point).
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+```
+
+
+```{r}
+preprocess <- function(file) {
+  read_delim(file, ";", show_col_types = FALSE) %>%
+    select(pH, quality) %>%
+    mutate(good = ifelse(quality > 5, "1", "0")) %>%
+    select(-quality)
+}
+
+preprocess("winequality-white.csv")
+```
+2.  Calculate the summary statistics for `pH` for good, bad and all
+    wines separately, that is: mean, median, standard deviation,
+    interquartile range, minimum and maximum of both samples. Display
+    the results in a table and comment on the differences between both
+    groups, if any (1 point).
+```{r}
+
+nest_df <- function(df) {
+  tibble(
+    good = c("0", "1", "all"),
+    data = list(
+      df %>% filter(good == "0") %>% select(pH),
+      df %>% filter(good == "1") %>% select(pH),
+      df %>% select(pH)
+    )
+  )
+}
+
+summary_tbl <- function(df) {
+  df %>%
+    mutate(summary = map(data, ~ .x$pH %>%
+      summary() %>%
+      append(c(SD = sd(.x$pH))))) %>%
+    select(good, summary) %>%
+    tidyr::unnest_wider(summary)
+}
+
+preprocess("winequality-white.csv") %>%
+  nest_df() %>%
+  summary_tbl()
+```
+
+* Based on the results of the table there isn't 
+much of a difference between the pH of the wines that are good or bad.
+Everything is pretty similar across the board.
+
+
+3.  Plot a histogram of `pH` for good, bad and all wines and add to the
+    plots a normal density, estimating the parameters from the data.
+    Produce same histograms with corresponding normal densities for good
+    and bad wines separately. Do you observe any differences in the
+    distributions? (2 point).
+
+```{r}
+create_hists <- function(df) {
+  color <- c("Bad" = "#ba3b46", "Good" = "#61c9a8", "All" = "#ed9b40")
+
+  df %>%
+    mutate(
+      hist = imap(data, ~ ggplot() +
+        geom_histogram(
+          data = .x,
+          aes(x = pH, fill = names(color)[.y], y = ..density..),
+          alpha = 0.2,
+          bins = 30
+        ) +
+        geom_function(
+          fun = dnorm,
+          args = list(
+            mean = df[[.y, "data"]][[1]]$pH %>% mean(),
+            sd = df[[.y, "data"]][[1]]$pH %>% sd()
+          ),
+          color = color[.y]
+        ) +
+        scale_fill_manual(
+          name = "Wine Quality",
+          values = color[.y]
+        ) +
+        ylab("Density"))
+    )
+}
+
+
+combined_hist <- function(df) {
+  color <- c("Bad" = "#ba3b46", "Good" = "#61c9a8", "All" = "#ed9b40")
+
+  plot <- ggplot()
+  plot$layers <- df$hist %>%
+    map(~ .x$layers) %>%
+    unlist()
+
+  plot + ylab("Density") + xlab("pH") + scale_fill_manual(
+    name = "Wine Quality",
+    values = color
+  )
+}
+
+preprocess("winequality-white.csv") %>%
+  nest_df() %>%
+  create_hists() %>%
+  combined_hist()
+
+
+preprocess("winequality-white.csv") %>%
+  nest_df() %>%
+  create_hists() %>%
+  filter(good == "1" | good == "0") %>%
+  pull(hist)
+```
+
+* Based on the plot above the corresponding histograms for 
+  good, bad, and all wine qualities show that the pH 
+  is similarly distributed. 
+
+* All of these curves follow a normal distribution. 
+
+* We can see that the mean pH of bad quality wine is a bit smaller than the pH of 
+  good and all quality wine. 
+
+* We can also see that the distribution of bad wine quality is narrower than
+  the distribution of good and all wine quality which  
+  indicates that there is less variance associated with 
+  pH. 
+
+* It is much easier to compare these plots when they are 
+  combined into one plot. When the plots are seperated  
+  we could probably make out that the bad quality pH
+  mean is smaller but probably wouldn't pick up on the 
+  difference in variance.
+
+
+
+      
+
+4.  Generate QQ-plots with `ggplot` of `pH` for good, bad and all wines
+    to compare empirical quantiles of the samples to the theoretical
+    quantiles of a normal distribution. Add a angle bisector line to the
+    plot. Do you think all samples follow a normal distribution? (1
+    points).
+
+
+
+```{r}
+create_qq_plots <- function(df) {
+  color <- c("Bad" = "#ba3b46", "Good" = "#61c9a8", "All" = "#ed9b40")
+
+  df %>%
+    mutate(
+      qq_plot = imap(data, ~ ggplot() +
+        geom_qq(data = .x, aes(
+          sample = pH,
+          color = names(color)[.y]
+        )) +
+        geom_qq_line(
+          data = .x,
+          aes(
+            sample = pH,
+            color = names(color)[.y]
+          )
+        ))
+    )
+}
+
+
+combined_qq_plot <- function(df) {
+  color <- c("Bad" = "#ba3b46", "Good" = "#61c9a8", "All" = "#ed9b40")
+
+  plot <- ggplot()
+  plot$layers <- df$qq_plot %>%
+    map(~ .x$layers) %>%
+    unlist()
+
+  plot + scale_color_manual(
+    name = "Wine Quality",
+    values = color
+  )
+}
+
+
+preprocess("winequality-white.csv") %>%
+  nest_df() %>%
+  create_qq_plots() %>%
+  combined_qq_plot()
+```
+
+
+* It seems that the distribution of pH for good quality wine  
+  follows a normal distribution.
+
+* It seems that the distribution of pH for bad quality wine  
+  does not follow a normal distribution it is right skewed  
+  with a heavy right tail.
+
+* It seems that the distribution of pH for all quality wine  
+  follows a normal distribution but it has a heavier right  
+  tail than the distribution for the pH of good quality 
+  wine.
+
+
+
+# 2. Simulation study
+
+Suppose that $X_1,\ldots,X_n$ are independent and identically
+distributed (iid) binomial random variables such that $$
+  P(X_i=x\mid k,p)
+  ={k\choose x}p^x(1-p)^{k-x},\quad x=0,1,\ldots,k
+$$ for all $i=1,\ldots,n$. Assume that both $k$ and $p$ are unknown and
+use the method of moments to obtain point estimators of both parameters.
+This somewhat unusual application of the binomial model has been used to
+estimate crime rates for crimes that are known to have many unreported
+occurrences. For such a crime, both the true reporting rate, $p$, and
+the total number of occurrences, $k$, are unknown. Equating the first
+two sample moments to those of the population yields the system of
+equations $$
+  \bar X=kp
+  \quad\text{and}\quad
+  \frac1n\sum_{i=1}^nX_i^2=kp(1-p)+k^2p^2,
+$$ where $\bar X$ is the sample mean. Solving for $k$ and $p$ leads to
+$$
+  \hat k=\frac{\bar X^2}{\bar X-(1/n)\sum_{i=1}^n(X_i-\bar X)^2}
+  \quad\text{and}\quad
+  \hat p=\frac{\bar X}{\hat k}.
+$$ It is difficult to analyze the performance of $\hat k$ and $\hat p$
+analytically so you are asked to perform a simulation study using `R`.
+The idea is to generate random samples and investigate the performance
+of $\hat k$ and $\hat p$ using random samples.
+
+1.  Generate a single simple random sample of length `n <- 50` from the
+    binomial distribution with the parameters `k <- 10`, `p <- 0.4` (1
+    point).
+
+```{r}
+rbinom(50, 10, 0.4)
+```
+
+2.  Write a function that takes a sample as its input and returns a
+    vector containing the estimates of `k` and `p` given above (3
+    points).
+```{r}
+
+set.seed(101)
+
+estimate_parameters <- function(sample) {
+  x_bar <- mean(sample)
+  n <- length(sample)
+  k_hat <- x_bar^2 / (x_bar - (1 / n * sum((sample - x_bar)^2)))
+  p_hat <- x_bar / k_hat
+  c("k_hat" = k_hat, "p_hat" = p_hat)
+}
+
+estimate_parameters(rbinom(50, 10, 0.4))
+```
+
+3.  Generate `N <- 1000` samples of size `n <- 50` (as in the first
+    question) and calculate `N <- 1000` estimates of $k$ and `N <- 1000`
+    estimates of $p$ (4 points if no loops are used in the code, 2
+    points if any loop (`for`, `while`, `repeat`, etc.) is used in the
+    code ).
+```{r}
+
+est_param_df <- function(n) {
+  set.seed(101)
+  1:1000 %>%
+    map(~ rbinom(n, 10, 0.4)) %>%
+    map_df(~ estimate_parameters(.x))
+}
+
+
+est_param_df(50)
+```
+
+4.  Repeat Question 3 when `n <- 100` and when `n <- 250` (2 points).
+
+```{r}
+est_param_df(100)
+est_param_df(250)
+```
+
+5.  Estimate the bias and the mean squared error (MSE), 
+$$MSE(k,\hat k) = \sum_{i=1}^n(k - \hat k)^2,$$ 
+of $\hat k$ and
+    the bias and the MSE of $\hat p$ for each sample size (`n <- 50`,
+    `n <- 100` and `n <- 250`). Do the estimators seem to overestimate
+    or underestimate the parameters? How do the bias and the MSE change
+    when the sample size increases? (3 points).
+
+```{r}
+
+mse <- function(est_param, true_param, n) {
+  sum((true_param - est_param)^2) / n
+}
+
+bias <- function(est_param, true_param) {
+  mean(est_param) - true_param
+}
+
+
+disp_df <- function(param, true_value) {
+  c(50, 100, 250) %>%
+    set_names() %>%
+    map_dfr(function(n) {
+      df <- est_param_df(n)
+      list(
+        "MSE" = df %>% pull({{ param }}) %>% mse(true_value, n),
+        "Bias" = df %>% pull({{ param }}) %>% bias(true_value)
+      )
+    }, .id = "n")
+}
+
+
+
+disp_df(k_hat, 10)
+disp_df(p_hat, 0.4)
+```
+
+* Both estimators overestimate the parameters because 
+  the bias is positive
+
+* Both the bias and MSE decrease when the sample size increases
+
+6.  
+
+a. Make a single plot using `ggplot2` that contains three box plots
+        of the estimates of the parameter `k` when `n <- 50`,
+        `n <- 100`, `n <- 250` (the first from the left box plot has to
+        describe the estimates when `n <- 50`, the second from the left
+        box plot has to describe the estimates when `n <- 100` and the
+        third from the left box plot has to describe the estimates
+        `n <- 250`). Include the true value of the parameter as a
+        horizontal line (`geom_hline()` and use the argument `color`)
+        and label the plot appropriately (4 points).
+```{r}
+
+param_df <- function() {
+  c(50, 100, 250) %>%
+    set_names() %>%
+    map_dfr(~ est_param_df(.x), .id = "n")
+}
+
+param_boxplot <- function(df, param, true_value) {
+  plot <- ggplot(
+    data = df,
+    aes(
+      y = {{ param }},
+      fill = factor(as.integer(n))
+    )
+  ) +
+    geom_boxplot() +
+    geom_hline(yintercept = true_value, color = "yellow") +
+    guides(fill = guide_legend(title = "n"))
+
+
+  plot
+}
+
+param_df() %>% param_boxplot(k_hat, 10)
+```
+
+b.  $\hat k$ can obtain values that are far away from the true value
+        of the parameter when the sample size is small and the box plots
+        might not be particularly informative in such a situation.
+        Remove the estimates from the plot that are outside of the
+        interval $[0,50]$ so that the box plots are more informative (4
+        points).
+
+
+
+```{r}
+param_boxplot <- function(df, param, true_value) {
+  plot <- ggplot(
+    data = df,
+    aes(
+      y = {{ param }},
+      fill = factor(as.integer(n))
+    )
+  ) +
+    geom_boxplot() +
+    geom_hline(yintercept = true_value, color = "yellow") +
+    guides(fill = guide_legend(title = "n"))
+
+  if (rlang::as_name(enquo(param)) == "k_hat") plot <- plot + ylim(0, 50)
+
+
+  plot
+}
+
+param_df() %>% param_boxplot(k_hat, 10)
+```
+
+
+
+c.  Make the same plot with three box plots for the estimates of the
+        parameter `p` (b part does not apply here) (2 points).
+
+```{r}
+param_df() %>% param_boxplot(p_hat, 0.4)
+```
+
+d.  Describe how both of these plots change when the sample size
+        increases (2 points).
+
+* We can see in both plots that the variance of the 
+  estimates becomes smaller with increasing sample size.
+
+* Each box plot gets shorter towards the true value of the parameter
+  from left to right.
+
+* In both plots the outlier points become become more centralized  
+  around the true value of the parameter.
+

@@ -1,0 +1,300 @@
+---
+title: 'STA 141A Fall 2022: Homework 1'
+author: 'Camden Possinger'
+date: "`r format(Sys.time(), '%d %B, %Y')`" 
+output:
+  html_document:
+    number_sections: yes
+    theme: lumen
+---
+
+
+# Vectors and simulation
+Suppose that we have:
+
++ four types of animals: `cat`, `dog`, `cow`, `squirrel`;
++ four possible colors: `white`, `black`, `brown`, `red`;
++ five possible attributes: `big`, `small`, `angry`, `cute`, `finicky`.
+
+a. (1 point) Generate three random samples of size `100` from each of the three groups, so that you have a vector containing 100 animals, a vector containing 100 colors and a vactor containing 100 attributes. Call the resulting vectors of character strings as: `Animal`, `Color`, `Attribute`.
+
+
+```{r}
+set.seed(2022)
+library(magrittr)
+
+Animal <- sample(c("cat", "dog", "cow", "squirrel"), 100, TRUE)
+Color <- sample(c("white", "black", "brown", "red"), 100, TRUE)
+Attribute <- sample(c("big", "small", "angry", "cute", "finicky"), 100, TRUE)
+```
+
+
+b. (1 point) Using the `sum()` function and a logical vector, compute the number of animals that are cats or dogs.
+
+```{r}
+
+(Animal == "dog" | Animal == "cat") %>% sum()
+```
+
+
+c. (1 point) Compute the relative frequency of cats, dogs, cows and squirrels in the sample.
+
+```{r}
+
+(Animal %>% table()) / (Animal %>% length())
+```
+
+
+d. (1 point) Create a contingency table between `Animal` and `Attribute`.
+
+```{r}
+
+data.frame(
+  Animal = Animal,
+  Attribute = Attribute
+) %>% table()
+```
+
+
+
+
+e. (2 point) Put the three vectors together in a list of three elements called `mylist`, so that each vector is an element of the list. Use the command `length(mylist[1])` to print the length of the first vector. Is this code actually printing the length of the vector? Explain and write the correct code to print the length of the first vector of the list.
+
+```{r}
+
+mylist <- list(
+  "Animal" = Animal,
+  "Color" = Color,
+  "Attribute" = Attribute
+)
+
+length(mylist[1])
+```
+The single brackets return the first element as a list of length 1 
+so this is not the correct length of the atomic vector stored in the first element.
+
+Here's the correct code: 
+
+```{r}
+
+mylist %>%
+  extract2(1) %>%
+  length()
+```
+
+
+
+
+# Matrices
+Consider the following system of linear equations
+\begin{align*}
+x_1+2x_2+3x_3+4x_4+5x_5&=7,\\
+2x_1+x_2+2x_3+3x_4+4x_5&=-1,\\
+3x_1+2x_2+x_3+2x_4+3x_5&=-3,\\
+4x_1+3x_2+2x_3+x_4+2x_5&=5,\\
+5x_1+4x_2+3x_3+2x_4+x_5&=17.
+\end{align*}
+
+a. (1 point) Create the matrix `A` and the vector `y` corresponding to the matrix equation $Ax=y$, where $A\in\mathbb R^{5\times 5}$ and $x,y\in\mathbb R^5$. 
+
+```{r}
+
+A <- matrix(c(1, 2, 3, 4, 5, 2, 1, 2, 3, 4, 3, 2, 1, 2, 3, 4, 3, 2, 1, 2, 5, 4, 3, 2, 1), nrow = 5)
+y <- c(7, -1, -3, 5, 17)
+```
+
+
+b. (1 point) Determine if the matrix `A` is invertible using the `det()` function.
+```{r}
+
+A %>% det()
+```
+
+A is invertible since the determinant is not 0
+
+
+
+
+c. (1 point) Find the solution of the system of linear equations using the `solve()` function.
+
+```{r}
+
+solve(A, y)
+```
+
+
+
+# Data exploration and manipulation
+
+The task is to explore the US census population estimates by county for 2015 from the package `usmap` (load the data frame from `countypop.RData`). The data frame has `3142` rows and `4` variables: `fips` is the 5-digit FIPS code corresponding to the county; `abbr` is the 2-letter state abbreviation; `county` is the full county name; `pop_2015` is the 2015 population estimate (in number of people) for the corresponding county. Each row of the data frame represents a different county or a county equivalent. For the sake of simplicity, when we say a county, that also includes a county equivalent and when we say a state, that also includes the District of Columbia. 
+
+without creating new functions, and without using for loops, answer the following questions (using `dplyr` is allowed). 
+
+```{r}
+library(dplyr)
+load("countypop.RData")
+head(countypop)
+```
+
+
+a. (1 point) Remove all the rows that contain at least one NA.
+
+```{r}
+countypop %<>% na.omit()
+```
+
+b. (1 point) What is the total number of counties in the US?
+```{r}
+countypop$fips %>% length()
+```
+
+c. (1 point) How many unique county names are there?
+```{r}
+countypop$county %>%
+  unique() %>%
+  length()
+```
+
+d. (1 point) What are the top 10 most common county names?
+```{r}
+countypop %>%
+  count(county, sort = TRUE) %>%
+  slice(1:10)
+```
+
+e. (1 point) Which state has the largest number of counties? Which state has the smallest number of counties?
+```{r}
+
+# largest number of counties
+countypop %>%
+  count(abbr, sort = TRUE) %>%
+  head(1)
+# smallest number of counties
+countypop %>%
+  count(abbr, sort = TRUE) %>%
+  tail(1)
+```
+
+f. (1 point) What is the average population of a county in the US?
+```{r}
+countypop$pop_2015 %>%
+  mean() %>%
+  round()
+```
+
+g. (2 points) Which state has the largest county in terms of population? How many people live in the largest county in terms of population?
+```{r}
+countypop %>%
+  arrange(desc(pop_2015)) %>%
+  head(1)
+```
+
+h. (2 points) In order to answer the following question, combine the functions `lapply()`, `split()`, `order()`, and `tail()` (or `head()`): What is the largest county in terms of population of each of the states? 
+```{r}
+
+countypop %>%
+  split(countypop$abbr) %>%
+  lapply(function(state) {
+    state[state$pop_2015 %>% order(decreasing = TRUE), c("abbr", "county", "pop_2015")] %>%
+      head(1)
+  }) %>%
+  bind_rows()
+```
+
+i. (2 points) What is the average population of the 100 largest counties in the US?
+```{r}
+
+countypop %>%
+  arrange(desc(pop_2015)) %>%
+  head(100) %>%
+  .$pop_2015 %>%
+  mean()
+```
+j. (2 points) How many people live in each of the states?
+```{r}
+
+countypop %>%
+  group_by(abbr) %>%
+  summarise("Total Population" = sum(pop_2015))
+```
+
+k. (1 point) What is the average population of a county in California?
+
+```{r}
+
+countypop %>%
+  filter(abbr == "CA") %>%
+  .$pop_2015 %>%
+  mean() %>%
+  round()
+```
+
+
+
+
+
+# For loops
+
+a. (2 points) Find the bug: The following `for` loop creates a vector that contains the sum of the first `n` numbers. In particular, if you set `n = 10`, the for loop should return a vector of size `10` containing the values 1, (1+2), (1+2+3), ...., (1+2+3+4+5+6+7+8+9+10). In words, explain why this `for` loop does not create the desired vector, and write the correct code.
+
+```{r,  results=F}
+
+n <- 10
+sums <- numeric(n)
+for (i in 1:n) {
+  sums <- sum(1:i)
+}
+sums
+```
+
+This code does not append each sum to the vector it just returns the last sum: sum(1:10)
+
+```{r}
+
+1:10 %>% sapply(function(i) {
+  sum(1:i)
+})
+```
+
+
+b. (2 points) In words, explain what the following code does:
+
+```{r, results=F}
+n <- 10
+x <- 1:(2 * n)
+while (x[1] < n) {
+  x <- x[-1]
+}
+x
+```
+
++ First the variable "n" is assigned the value 10. 
+
++ Then the variable x is assigned an atomic vector containing values from 1 to 20.
+
++ Then while the first value of x is less than 10 the first value of x is removed 
+  and the x vector is updated with its length subtracted by 1.
+
++ At the end of execution x should be the vector c(10:20)
+
+
+c. (2 points) In words, explain what the following code does:
+
+```{r , results=F}
+lapply(c(5, 10), rnorm, m = c(0, 10))
+```
+
++ This code creates a list with length 2. 
+
++ The first element is 5 random numbers sampled from a normal distribution
+  with mean that alternates between values 0 and 10 for each iteration stored in an atomic vector
+
++ The second element is 10 random numbers sampled from a normal distribution
+  with mean that alternates between values 0 and 10 for each iteration stored in an atomic vector
+ 
+
+
+<br>
+<br>
+<br>
+<br>

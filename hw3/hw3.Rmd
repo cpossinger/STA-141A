@@ -1,0 +1,339 @@
+---
+title: 'STA 141A Fall 2022: Homework 3'
+author: ''
+date: ""
+output:
+  html_document:
+    number_sections: no
+---
+
+
+For all the hypothesis tests in this assignment, you should test against the significance level 0.01.
+
+# Multiple linear regression: Simulated data
+```{r message = FALSE}
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(ISLR)
+library(GGally)
+```
+```{r}
+
+cor_answer <- function(x1, x2) {
+  num <- cor(x1, x2)
+  data <- cbind(x1, x2) %>% as.data.frame()
+
+  plot <- ggplot(
+    data,
+    aes(
+      x = x1,
+      y = x2
+    )
+  ) +
+    geom_point()
+
+  list(
+    cor = num,
+    plot = plot
+  )
+}
+
+model_answer <- function(model) {
+  par(mfrow = c(2, 2))
+  list(
+    model = model,
+    s = model %>% sigma() %>% sqrt(),
+    summary = model %>% summary(),
+    plot = model %>% plot()
+  )
+}
+```
+
+1. Run the following code to create the vectors `x1`, `x2`, and `y`.
+```{r}
+set.seed(1)
+n <- 100
+x1 <- runif(n)
+x2 <- runif(n, 10, 20)
+y <- 2 + 2 * x1 + 0.3 * x2 + rnorm(n)
+```
+a. (1 pts) The last line of the code above corresponds to creating a linear model in which `y` is a function of `x1` and `x2`. Write out the form of the linear model. What are the values of the regression coefficients $\beta_0$, $\beta_1$ and $\beta_2$? What is the value of $\sigma^2$?
+
+  \[ y = \beta_0 + \beta_1(x1) + \beta_2(x2) + \varepsilon \] 
+  \[ \beta_0 = 2  \] 
+  \[ \beta_1 = 2  \] 
+  \[ \beta_2 = 0.3  \] 
+  \[ \sigma^2 = 1  \] 
+
+b. (1 pts) Use the function `cor()` to calculate the correlation coefficient between `x1` and `x2`. Create a scatter plot using `ggplot2` displaying the relationship between the variables `x1` and `x2`. What can you say about the direction and strength of their relationship?
+
+
+
+```{r}
+cor_answer(x1, x2)
+```
+
+* There doesn't seem to be any correlation between x1 and x2
+
+c. (2 pts) Fit a least squares regression to predict `y` using `x1` and `x2`. Describe the obtained results. What are the values of $\hat\beta_0$, $\hat\beta_1$ and $\hat\beta_2$? How do these relate to the true values of $\beta_0$, $\beta_1$ and $\beta_2$? What is the value of $s = ((n - p - 1)^{-1}\sum_{i=1}^n(y_i-\hat y_i)^2)^{0.5}$ and how does it relate to the true value of $\sigma^2$? Can you reject the null hypothesis $H_0:\beta_1=0$? How about the null hypothesis $H_0:\beta_2=0$?
+
+```{r}
+model_answer(lm(y ~ x1 + x2))
+```
+  
+* All of these estimated quantities are very close to their true values.
+* We have evidence to reject the null hypothesis for both tests.
+
+d. (2 pts) Now fit a least squares regression to predict `y` using only `x1`. Comment on your results. What are the values of $\hat\beta_0$ and $\hat\beta_1$? How do these relate to the true values of $\beta_0$ and $\beta_1$? What is the value of $s$ and how does it relate to the true value of $\sigma^2$? Can you reject the null hypothesis $H_0:\beta_1=0$?
+
+```{r}
+model_answer(lm(y ~ x1))
+```
+
+* In this model the estimated coefficient for $\beta_0$, 
+  is much larger than its true value  
+  all others are pretty close to their true values. 
+
+* Here we have evidence to reject the null hypothesis for this test
+  \[H_0: \beta_1 = 0 \]
+
+e. (2 pts) Now fit a least squares regression to predict `y` using only `x2`. Comment on your results. What are the values of $\hat\beta_0$ and $\hat\beta_2$? How do these relate to the true values of $\beta_0$ and $\beta_2$? What is the value of $s$ and does it relate to the true value of $\sigma^2$? Can you reject the null hypothesis $H_0:\beta_2=0$?
+
+```{r}
+model_answer(lm(y ~ x2))
+```
+* In this model the estimated coefficient for $\beta_0$, 
+  larger than its true value  
+  all others are pretty close to their true values. 
+
+
+* Here we have evidence to reject the null hypothesis for the test
+  \[H_0: \beta_2 = 0 \]
+
+2. Run the following code to create the vectors `x1`, `x2`, and `y`.
+
+```{r}
+set.seed(1)
+n <- 100
+x1 <- runif(n)
+x2 <- 0.5 * x1 + rnorm(n, 0, .01)
+y <- 2 + 2 * x1 + 0.3 * x2 + rnorm(n)
+```
+
+a) (4 pts) Repeat parts b, c, d, and e of Exercise 1 using the new vectors `x1`, `x2` and `y`. What differences do you see between Exercise 1 and Exercise 2? Explain why these differences occur.
+
+```{r}
+cor_answer(x1, x2)
+model_answer(lm(y ~ x1 + x2))
+model_answer(lm(y ~ x1))
+model_answer(lm(y ~ x2))
+```
+
+* The main difference is that when x1 and x2 are  
+  included in a linear model they are not significant in 
+  describing y but individually they are significant.
+
+* This is due to the almost perfect  
+  multicollinearity involved between x1 and x2. 
+
+* Since x2 is essentially half of x1 the model
+  with only x2 tries to compensate by setting the estimated value 
+  of x2 to be 2 times the true value of x1.
+
+
+3. Use `x1`, `x2` and `y` from Exercise 2 and suppose that we obtain one additional observation, which was unfortunately mismeasured.
+```{r}
+x1 <- c(x1, 0.1)
+x2 <- c(x2, 0.8)
+y <- c(y, 6)
+```
+a) (4 pts) Re-fit the linear models from parts c, d and e of Exercise 1 using this new data. What effect does this new observation have on each of the models? In each model, is this observation an outlier? A high-leverage point? Both? Explain your answers.
+
+```{r}
+model_answer(lm(y ~ x1 + x2))
+```
+
+* In this model the new observation skews the parameter estimates 
+  far from their true values.
+
+* This new observation is not an outlier because the residual  
+  associated with that observation is close to 0 but it is a 
+  high leverage point based on Cook's distance compared to other points.
+
+
+```{r}
+model_answer(lm(y ~ x1))
+```
+* In this model the new observation skews the parameter estimate
+  of x1 a little from its true value.
+  
+
+* This new observation is an outlier because the residual  
+  associated with that observation is not close to 0 and it is not a 
+  high leverage point based on Cook's distance compared to other points.
+
+
+```{r}
+model_answer(lm(y ~ x2))
+```
+* In this model the new observation skews the parameter estimate of x2
+  far from its true value.
+
+* This new observation is not an outlier because the residual  
+  associated with that observation is close to 0 but it is a 
+  high leverage point based on Cook's distance compared to other points.
+
+# Multiple Linear Regression: Application
+
+Load the `Carseats` data set contained in the `ISLR` library. `Carseats` is a simulated data set containing sales of child car seats at 400 different stores.
+
+It contains the following variables:
+
+* `Sales`: Unit sales (in thousands) at each location
+* `CompPrice`: Price charged by competitor at each location
+* `Income`: Community income level (in thousands of dollars)
+* `Advertising`: Local advertising budget for company at each location (in thousands of dollars)
+* `Population`: Population size in region (in thousands)
+* `Price`: Price company charges for car seats at each site
+* `ShelveLoc`: A factor with levels Bad, Good and Medium indicating the quality of the shelving location for the car seats at each site
+* `Age`: Average age of the local population
+* `Education`: Education level at each location
+* `Urban`: A factor with levels No and Yes to indicate whether the store is in an urban or rural location
+* `US`: A factor with levels No and Yes to indicate whether the store is in the US or not
+
+For this Problem you will consider only Sales, Price, Income, Urban, ShelveLoc and Advertising.
+
+```{r}
+Carseats <- Carseats %>% select(
+  Price,
+  Sales,
+  Income,
+  Urban,
+  ShelveLoc,
+  Advertising
+)
+```
+
+a. (2 points) Graphically explore the relationship between the six above variables (use the `ggpairs` function in the `GGally`). Comment on the plots: are they bivariate or univariate plots? Describe the plots (x-axis, y-axis, etc). What do you notice in the distribution of the variable `advertising`?
+
+```{r message = FALSE}
+ggpairs(Carseats)
+```
+
+* Univariate plots are on the diagonal.
+
+* Bivariate plots are on the off-diagonal.
+
+* The distribution of Advertising seems bimodal 
+  with most observations recieving a value 
+  between 0 and 20.
+
+b. (2 points) Fit a multiple regression model to predict `Sales` using `Price`, `Income`, `Urban`, `Advertsing`, and `ShelveLoc`. Provide an interpretation of each coefficient in the model (be careful—some of the variables in the model are qualitative!).
+
+```{r}
+model <- lm(Sales ~ ., data = Carseats)
+model %>% summary()
+```
+
+* Price: With a one unit increase in Price, Sales on average will decrease by 0.06. 
+
+* Income: With a one unit increase in Income, Sales on average will increase by 0.01. 
+
+* UrbanYes: When Urban switches from no to yes, Sales on average will increase by 0.20. 
+
+* ShelveLocGood: When ShelveLoc switches from bad to good, Sales on average will increase by 4.86. 
+
+* ShelveLocMedium: When ShelveLoc switches from bad to medium,Sales on average will increase by 1.91. 
+
+* Advertising: With a one unit increase in Advertising, Sales on average will increase by 0.11. 
+
+c. (1 point) Write out the model in equation form, being careful to handle the qualitative variables properly (check this out: https://rmd4sci.njtierney.com/math to learn how to insert equations in Rmarkdown).
+
+\[ Sales = \beta_0 +
+          \beta_1(Price) + 
+          \beta_2(Income) + 
+          \beta_3(I(UrbanYes)) + 
+          \beta_4(I(ShelveLocGood)) + 
+          \beta_5(I(ShelveLocMedium)) + 
+          \beta_6(Advertising) \]
+
+
+d. (2 points) For which of the predictors can you reject the null hypothesis $H_0 : \beta_j = 0$?  Moreover, which are the most significant variables?
+
+```{r}
+model %>% summary()
+```
+
+* Here we can reject the tests for 
+  all predictors except for UrbanYes since 
+  the p-value for that test is greater than
+  0.01.
+
+* Here we can't say which variables are the most significant
+  we can only say that we have evidence to reject the null 
+  hypothesis for these tests that have p-value less than 
+  0.01.
+
+e. (2 point) On the basis of your response to the previous question, fit a smaller model that only uses the predictors for which there is evidence of association with the outcome. Apply an F-test to compare the models and comment on the results.
+
+```{r}
+model_small <- lm(Sales ~ . - Urban, data = Carseats)
+anova(model, model_small)
+```
+
+* Here the p-value of this F-test is greater than 0.01
+  so we fail to reject the null hypothesis and conclude 
+  that these two models are the same.
+
+g. (3 points) Consider the reduced model in (e). Discuss whether the assumption of uncorrelated errors is justified. Plot the residuals to see whether there is heteroskedasticity present and whether the normality assumption holds. 
+
+```{r}
+
+res <- model_small$residuals
+fitted <- model_small$fitted
+
+res_data <- cbind(res, fitted) %>% as.data.frame()
+
+ggplot(res_data, aes(x = res, y = fitted)) +
+  geom_point() +
+  geom_hline(aes(yintercept = 7.5), color = "red") +
+  ylab("Fitted Values") +
+  xlab("Residuals")
+
+ggplot(res_data, aes(sample = res)) +
+  geom_qq() +
+  geom_qq_line()
+```
+
+* Here the assumption of uncorrelated errors is justified. 
+
+* There is heteroskedasticity present and the normality assumption holds.
+
+h. (2 points) Consider the variable `Advertising`. Create a variable called `Advertising_levels` which is equal to `None` if Advertising=0, `Low` if Advertising is less than 10, `Medium` if Advertising is between 10 and 20, and `High` otherwise.  Fit the reduced model in (e) including the variable `Advertising_levels` instead of the variable `Advertsing`. Interpret the coefficients of the variable `Advertising_levels` and compare it with the coefficient of `Advertising` given by the model in (e).
+
+```{r}
+Carseats <- Carseats %>% mutate(Advertising_levels = factor(case_when(
+  Advertising == 0 ~ "None",
+  Advertising < 10 ~ "Low",
+  Advertising >= 10 & Advertising <= 20 ~ "Medium",
+  TRUE ~ "High"
+), levels = c("None", "Low", "Medium", "High")))
+
+
+model_levels <- lm(Sales ~ . - Advertising - Urban, data = Carseats)
+
+model_levels %>% summary()
+```
+
+* Advertising_levelsLow: When Advertising_levels switches from None to Low, Sales on average will increase by 0.66. 
+
+* Advertising_levelsMedium: When Advertising_levels switches from None to Medium, Sales on average will increase by 1.36. 
+
+* Advertising_levelsHigh: When Advertising_levels switches from None to High, Sales on average will increase by 3.02. 
+
+* This result makes sense since the estimated coefficient for Advertising is 0.11, but the result of Advertising_levels shows
+  that the effect does not linearly increase. Having an high advertising level increases sales more than having a medium or low  
+  advertising level.
+
+

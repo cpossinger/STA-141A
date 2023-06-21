@@ -1,0 +1,558 @@
+---
+title: 'STA-141A Fall 2022: Final Project'
+author: 'Christina Li, Sydney Lee, Camden Possinger'
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::downcute:
+    style_switcher: false
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  out.width = "100%",
+  out.height = "100%",
+  message = FALSE,
+  warning = FALSE
+)
+```
+```{r}
+library(readr)
+library(purrr)
+library(ggplot2)
+library(broom)
+library(skimr)
+library(knitr)
+library(car)
+library(tidyr)
+library(stringr)
+library(plotly)
+library(jtools)
+library(broom)
+library(dplyr)
+library(kableExtra)
+library(ggfortify)
+library(fastDummies)
+library(DT)
+
+
+spotify_preprocess <- function() {
+  df <- c(
+    "60s",
+    "70s",
+    "80s",
+    "90s",
+    "00s",
+    "10s"
+  ) %>%
+    purrr::set_names() %>%
+    map(~ read_csv(paste0("dataset-of-", .x, ".csv"),
+      show_col_types = FALSE
+    )) %>%
+    bind_rows(.id = "decade") %>%
+    dplyr::select(
+      -uri,
+      -artist,
+      -track,
+      -instrumentalness,
+      -loudness,
+      -speechiness,
+      -acousticness
+    ) %>%
+    group_by(decade) %>%
+    group_split() %>%
+    map(~
+      .x %>%
+        mutate(across(
+          where(is.numeric),
+          ~ ifelse(
+            abs(as.numeric(scale(.x))) > 3,
+            NA,
+            .x
+          )
+        )) %>%
+        na.omit()) %>%
+    bind_rows() %>%
+    dummy_cols(
+      select_columns = c("key", "time_signature", "mode"),
+      remove_selected_columns = TRUE,
+      remove_first_dummy = TRUE
+    ) %>%
+    mutate(
+      decade = factor(decade,
+        levels = c(
+          "60s",
+          "70s",
+          "80s",
+          "90s",
+          "00s",
+          "10s"
+        )
+      ),
+      danceability = exp(danceability),
+      energy = exp(energy),
+      valence = exp(valence),
+      chorus_hit = log(chorus_hit),
+      liveness = log(liveness),
+      sections = log(sections),
+      duration_ms = log(duration_ms),
+      target = as.integer(target)
+    )
+
+  df[which(!is.infinite(rowSums(df %>% dplyr::select(where(is.numeric))))), ] %>% group_by(decade)
+}
+```
+# Introduction 
+For this project, we are going to analyze Spotify songs to determine what features make a song popular corresponding to the decade. We hope to uncover relationships between popular songs through the decades and metrics like danceability, energy, loudness, chorus_hit, sections, valence, and more. 
+
+Music has been able to connect people through various decades. Through the decades, with more advanced technology, there has been an increase in access to music. With this accessibility, we can understand what songs in each decade from 1960 to 2019, so 7 decades to determine what makes a song a hit. As we know, some previous decade songs are still popular amongst this current decade. Spotify was released in 2011 and has an extensive list of songs. While songs are played frequently, some songs are more popular than others. We want to create a model for each decade from the 1960s to the 2010s and compare what makes music popular over time. The dataset we are going to be using contains data from over 40,000 songs from 1960 to 2019 with various attributes obtained from the Spotify API.
+
+Our goal is to make conclusions of what features made songs correspond to the decades and how this correlates through seven different decades we are looking at, from 1960 to 2019. In analyzing these trends, we can decide what features in each decade had made the song popular. This will be accomplished by conducting exploratory analysis and comparing multiple variables, as well as running regressions and performing transformations as needed. In doing this: we hope to answer the following questions: 
+
+# Research Questions
+- What features make the song popular in that decade?
+- What features are consistent among the decades?
+- What in general makes it a hit song?
+
+# Data Description
+The data is derived from the website Kaggle under the post ‘The Spotify Hit Predictor Dataset (1960 - 2019), which consists of more than 40,000 songs that we have merged into one dataset. The dataset originally contained nineteen different features and we removed seven features: uri, artist, track, instrumentalness, loudness, speechiness, and acousticness. The final dataset has eight features, with about 8,000 - 10,000 songs for each decade and 40,000 songs within seven decades.
+In our analysis, the features we excluded were because they would not have a meaningful effect. Some features like uri is just an identifier for the song, and the track is just the artist name which is not related to our current topic. The acousticness is excluded as a confidence measure using binary variables. The features we excluded just were not valid for our research questions as we compare among the decades. 
+
+# Data Visualization 
+
+## Summary Statistics
+```{r}
+spotify_preprocess() %>%
+  filter(target == 1) %>%
+  dplyr::select(where(is.double)) %>%
+  skim() %>%
+  focus(
+    decade,
+    numeric.mean,
+    numeric.sd,
+    numeric.hist
+  ) %>%
+  dplyr::select(-skim_type) %>%
+  setNames(c("Covariate", "Decade", "Mean", "SD", "Hist")) %>%
+  mutate(
+    Mean = round(Mean, digits = 2),
+    SD = round(SD, digits = 2)
+  ) %>%
+  datatable(
+    extensions = "RowGroup",
+    options = list(rowGroup = list(
+      dataSrc = 1,
+      startRender = JS(
+        "function(rows, group) {",
+        "  var style ='background-color:  #adadad;'",
+        "  var td = `<td style='${style}' colspan=12>${group}</td>`;",
+        "  return $(`<tr>${td}</tr>`);",
+        "}"
+      )
+    ))
+  ) %>%
+  formatRound(columns = 2:4, digits = 2)
+```
+
+## Continous Covariates
+
+```{r}
+ggplotly(
+  spotify_preprocess() %>%
+    filter(target == 1) %>%
+    summarise(across(where(is.double), list(mean))) %>%
+    pivot_longer(!decade, names_to = "feature", values_to = "mean") %>%
+    mutate(feature = feature %>% str_remove("_1")) %>%
+    ggplot(aes(x = mean, y = decade, fill = decade)) +
+    geom_bar(stat = "identity") +
+    ylab("Decade") +
+    xlab("Mean") +
+    labs(fill = "Decade") +
+    facet_wrap(~feature, scales = "free_x"),
+  height = 1000
+) %>%
+  config(displayModeBar = FALSE)
+```
+
+```{r}
+ggplotly(
+  spotify_preprocess() %>%
+    filter(target == 1) %>%
+    summarise(across(where(is.double), list(sd))) %>%
+    pivot_longer(!decade, names_to = "feature", values_to = "sd") %>%
+    mutate(feature = feature %>% str_remove("_1")) %>%
+    ggplot(aes(x = sd, y = decade, fill = decade)) +
+    geom_bar(stat = "identity") +
+    ylab("Decade") +
+    xlab("SD") +
+    labs(fill = "Decade") +
+    facet_wrap(~feature, scales = "free_x"),
+  height = 1000
+) %>%
+  config(displayModeBar = FALSE)
+```
+
+
+```{r}
+ggplotly(
+  spotify_preprocess() %>%
+    filter(target == 1) %>%
+    dplyr::select(where(is.double)) %>%
+    pivot_longer(!decade, names_to = "feature") %>%
+    ggplot(aes(value, color = decade, fill = decade)) +
+    geom_density(alpha = 0.2) +
+    ylab("Density") +
+    xlab("Value") +
+    labs(fill = "Decade") +
+    facet_wrap(~feature, scales = "free"),
+  height = 1000
+) %>%
+  config(displayModeBar = FALSE)
+```
+
+## Discrete Covariates
+
+```{r}
+ggplotly(
+  spotify_preprocess() %>%
+    filter(target == 1) %>%
+    dplyr::select(where(is.integer), -target) %>%
+    pivot_longer(!decade, names_to = "feature") %>%
+    filter(value == 1) %>%
+    mutate(value = as.integer(value)) %>%
+    group_by(decade, feature) %>%
+    summarise(sum = sum(value)) %>%
+    ggplot(aes(x = sum, y = decade, color = decade, fill = decade)) +
+    geom_bar(stat = "identity") +
+    ylab("Decade") +
+    xlab("Count") +
+    labs(fill = "Decade") +
+    facet_wrap(~feature, scales = "free"),
+  height = 1000
+) %>%
+  config(displayModeBar = FALSE)
+```
+
+# Methodology
+
+To answer our research question, we want to break down the data first, by splitting continuous and discrete variables into decades to understand basic deviations, standard deviations, and such. We notice that it does not look normally distributed, so using log and exponential transformation for density function to better visualize our graphs. Since we noticed that there are so many features in our full model, we want to create a smaller model that only has the most significant features. The smaller model allows us to use multiple linear regression to understand relationships between the features, so we can further compare among the decades. To make sure that the smaller model is useful, we want to fail to reject a null hypothesis. The logistic regression is helpful to conduct inference and predictions of a binary response which is our target feature that determines if the song is a hit or miss. Creating residual plots to understand predicted variables and fitted values. Lastly, to complete our research questions, comparing features between decades to compare and identify popularity within songs.
+
+# Results
+
+```{r}
+create_full_model <- function(df) {
+  glm(target ~ ., family = binomial(link = "logit"), data = df)
+}
+
+create_reduced_model <- function(df, coef) {
+  form <- paste0("target ~ ", paste0(coef, collapse = "+")) %>% as.formula()
+  glm(form, family = binomial(link = "logit"), data = df)
+}
+
+full_model <- spotify_preprocess() %>%
+  nest() %>%
+  mutate(
+    model = map(data, create_full_model),
+    summary = map(model, ~ .x %>%
+      tidy(exponentiate = TRUE) %>%
+      na.omit()),
+    glance = map(model, glance),
+    sig_coef = map(summary, ~ .x %>%
+      filter(p.value <= 0.05, term != "(Intercept)") %>%
+      pull(term)),
+    reduced_model = map2(data, sig_coef, create_reduced_model)
+  )
+
+reduced_model <- full_model %>%
+  dplyr::select(decade, data, model = reduced_model) %>%
+  mutate(
+    summary = map(model, ~ .x %>% tidy(exponentiate = TRUE)),
+    vif = map(model, vif),
+    glance = map(model, glance),
+    sig_coef = map(summary, ~ .x %>%
+      filter(p.value <= 0.05, term != "(Intercept)") %>%
+      pull(term)),
+    reduced_model = map2(data, sig_coef, create_reduced_model)
+  )
+
+reduced_model <- reduced_model %>%
+  dplyr::select(decade, data, model = reduced_model) %>%
+  mutate(
+    summary = map(model, ~ .x %>% tidy(exponentiate = TRUE)),
+    vif = map(model, vif),
+    glance = map(model, glance)
+  )
+```
+
+## Full Model Summary
+```{r}
+full_model %>%
+  pull(summary) %>%
+  setNames(c(
+    "60s",
+    "70s",
+    "80s",
+    "90s",
+    "00s",
+    "10s"
+  )) %>%
+  bind_rows(.id = "model") %>%
+  datatable(
+    extensions = "RowGroup",
+    options = list(rowGroup = list(
+      dataSrc = 1,
+      startRender = JS(
+        "function(rows, group) {",
+        "  var style ='background-color:  #adadad;'",
+        "  var td = `<td style='${style}' colspan=12>${group}</td>`;",
+        "  return $(`<tr>${td}</tr>`);",
+        "}"
+      )
+    ))
+  ) %>%
+  formatRound(columns = 3:6, digits = 2)
+```
+
+
+## Reduced Model Summary
+```{r}
+reduced_model %>%
+  pull(summary) %>%
+  setNames(c(
+    "60s",
+    "70s",
+    "80s",
+    "90s",
+    "00s",
+    "10s"
+  )) %>%
+  bind_rows(.id = "model") %>%
+  datatable(
+    extensions = "RowGroup",
+    options = list(rowGroup = list(
+      dataSrc = 1,
+      startRender = JS(
+        "function(rows, group) {",
+        "  var style ='background-color:  #adadad;'",
+        "  var td = `<td style='${style}' colspan=12>${group}</td>`;",
+        "  return $(`<tr>${td}</tr>`);",
+        "}"
+      )
+    ))
+  ) %>%
+  formatRound(columns = 3:6, digits = 2)
+```
+
+Full Model vs Reduced Model
+When comparing the reduced model to the larger full model, the reduced model is based on
+ANOVA, analyzing the p-values, creating a better fit model. All insignificant variables were removed from the full model, resulting in the reduced model where all the variables are significant making it the better model to be used.
+
+
+## Anova Table
+```{r}
+anova_tbl <- map2(full_model$model, reduced_model$model, ~ anova(.x, .y, test = "LRT")) %>%
+  setNames(c(
+    "60s",
+    "70s",
+    "80s",
+    "90s",
+    "00s",
+    "10s"
+  )) %>%
+  bind_rows(.id = "model")
+
+row.names(anova_tbl) <- NULL
+
+anova_tbl %>%
+  datatable(
+    extensions = "RowGroup",
+    options = list(rowGroup = list(
+      dataSrc = 1,
+      startRender = JS(
+        "function(rows, group) {",
+        "  var style ='background-color:  #adadad;'",
+        "  var td = `<td style='${style}' colspan=12>${group}</td>`;",
+        "  return $(`<tr>${td}</tr>`);",
+        "}"
+      )
+    ))
+  ) %>%
+  formatRound(columns = c(3, 5, 6), digits = 2)
+```
+The ANOVA Likelihood Ratio Tests are defined as:     
+
+\[H_0: \beta_1 = \beta_2 = ... = \beta_p = 0\] 
+\[H_A: \text{at least one }  \beta_i \neq 0\] 
+\[i = 1,...,p\] 
+
+We fail to reject each test given by the p-value in the above table at significance level 0.05. 
+Here we can conclude that for each decade the reduced model is equivalent to each full model. 
+From now on we'll consider the reduced models.
+
+## VIF Table
+```{r}
+vif_tbl <- reduced_model$vif %>%
+  bind_rows() %>%
+  t()
+
+colnames(vif_tbl) <- c(
+  "60s",
+  "70s",
+  "80s",
+  "90s",
+  "00s",
+  "10s"
+)
+
+vif_tbl %>%
+  datatable() %>%
+  formatRound(columns = 1:6, digits = 2)
+```
+For all the variance inflation factors, none of the values exceed 5 therefore there is no multicollinearity.
+
+## Model Evaluation Table
+```{r}
+
+glance_tbl <- reduced_model$glance %>%
+  bind_rows(.id = "model") %>%
+  mutate(model = c(
+    "60s",
+    "70s",
+    "80s",
+    "90s",
+    "00s",
+    "10s"
+  ))
+
+glance_tbl %>%
+  datatable() %>%
+  formatRound(columns = c(2, 4, 5, 6, 7), digits = 2)
+```
+AIC high in 80s and 90s, so standard deviation will be higher for the most of the features. With a lower AIC in the 10s decade and a smaller standard deviation, there would possibly be more commercialized sounds.
+
+```{r}
+scatter_lst <- map2(reduced_model$data, reduced_model$model, function(data, model) {
+  data %>%
+    dplyr::select(where(is.double)) %>%
+    cbind(fitted = model$fitted) %>%
+    pivot_longer(!fitted) %>%
+    ggplot(aes(y = fitted, x = value)) +
+    geom_point() +
+    facet_wrap(~name, scales = "free_x")
+})
+```
+
+## Evaluating Linear Assumption 
+
+### 60s
+
+```{r}
+scatter_lst[[1]]
+```
+
+### 70s
+
+```{r}
+scatter_lst[[2]]
+```
+
+### 80s
+
+```{r}
+scatter_lst[[3]]
+```
+
+### 90s
+
+```{r}
+scatter_lst[[4]]
+```
+
+### 00s
+
+```{r}
+scatter_lst[[5]]
+```
+
+### 10s
+
+```{r}
+scatter_lst[[6]]
+```
+
+For the 60’s there is a positive linear correlation between danceability and being a hit. For valence there is a weak positive correlation with being a hit. There is no correlation for chorus_hit, duration_ms, energy, liveness, sections and tempo.
+For the 70’s there is a positive moderate to strong correlation between danceability and the song being a hit. Valence also has a very weak correlation. There is no correlation for chorus_hit, duration_ms, energy, liveness, sections, tempo.
+For the 80’s, there is a weak correlation for danceability, and valence when comparing the real value to the fitted values. The other variables of chorus_hit, duration_ms, liveness, sections, and tempo have no correlation.
+For the 90’s, there is moderate positive correlation for danceability, very weak correlation for energy and valence. The other variables chorus_hit, duration_ms, liveness, sections, and tempo have no correlation.
+For the 00’s, there is weak to moderate positive correlation for danceability. All other variables  showed no correlation.
+For the 10’s there is only a weak to moderate correlation for danceability, and no correlation for the rest of the variables.
+
+
+## Residual Analysis
+
+### 60s 
+
+```{r}
+reduced_model$model[[1]] %>% autoplot(which = 1:2)
+```
+
+### 70s
+
+```{r}
+reduced_model$model[[2]] %>% autoplot(which = 1:2)
+```
+
+### 80s
+
+```{r}
+reduced_model$model[[3]] %>% autoplot(which = 1:2)
+```
+
+### 90s
+
+```{r}
+reduced_model$model[[4]] %>% autoplot(which = 1:2)
+```
+
+### 00s
+
+```{r}
+reduced_model$model[[5]] %>% autoplot(which = 1:2)
+```
+
+### 10s
+
+```{r}
+reduced_model$model[[6]] %>% autoplot(which = 1:2)
+```
+
+
+For the normal Q-Q plots for each of the decades, the data is mostly normally distributed since the plots generally follow a straight line.
+
+
+
+
+```{r}
+plot_summs(reduced_model$model,
+  model.names = c(
+    "60s",
+    "70s",
+    "80s",
+    "90s",
+    "00s",
+    "10s"
+  )
+)
+```
+
+
+The main features that made a song popular in the 1960’s were higher danceability, lower energy and shorter duration. Discrete values show the keys, there are eleven keys which is a music note indicator, which contains notes ranging from normal A to G and with sharps and flats.  For the 70’s the hit songs had a shorter duration, earlier chorus, and the main key of 8 which is G#/ Ab chords in the songs.  For the 80’s the main predictors of hit songs were lower danceability, higher energy, shorter duration, higher valence (cheery and happy sounds), major modality, greater number of sections, and the main key of 11. For the 80’s lower danceability, higher energy, shorter duration, and the main keys of 1 and 11 with a higher valence meant a more popular song. For the 90’s lower danceability, a main key of  3 and less sections made the song more popular. For the 2000’s higher danceability, lower energy, longer duration, lower number of sections made the song a hit. For the 2010’s higher danceability, longer duration, earlier chorus hit, lower valence (depressing, sad and angry sound), and main keys of 6, 10, and 11 which made songs in this decade a hit. Overall depending on the decade, different features were more prominent.
+
+As the decades progressed, hit songs increased in danceability and energy, but decreased in valence, the 60’s had more happy and cheery sounds while the 2000’s and 2010’s had more depressing and sad sounds. In general, what makes a hit song popular is how danceable it is, the energy the song has and the duration of the song.
+
+
+
+
+# Conclusion
+Based on our analysis of Spotify hit songs from 1960 to 2019, we were able to determine a few key features that made a song a hit each decade as well as in general. As music changed and evolved throughout the decades so did the features that made a song a hit. In the earlier decades happy and cheery music was popular, but in the later decades more depressing and sadder songs gained popularity. Songs with higher danceability and energy rose in popularity in the recent decades as songs with short duration which were once popular decreased in popularity. As shown by the residual analysis, the data is not completely normally distributed which means it is not totally reliable, but is still a good indicator of what makes a song popular. 
+

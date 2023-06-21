@@ -1,0 +1,253 @@
+---
+title: 'STA 141A Fall 2022: Homework 4'
+output: html_document
+date: "11/18/22" 
+---
+# Cross-validation
+
+We will perform cross-validation on a simulated data set.
+
+```{r}
+set.seed(11151)
+x <- runif(100)
+y <- 1 + x - x^2 + rnorm(100, 0, 0.1)
+```
+
+a. (1.5 points) Describe the model used to generate the data in equation form. What is the sample size $n$? 
+
+The model in equation form is: 
+
+\[y = 1 + x - x^2 + \epsilon \]
+\[n = 100\]
+
+where epsilon is normally distributed with mean 0 and standard deviation 0.1 
+
+b. (1.5 points) Create a scatterplot of X against Y . Comment on what you find. 
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+ggplot(data = bind_cols(
+  x = x,
+  y = y
+), aes(
+  x = x,
+  y = y
+)) +
+  geom_point()
+```
+
+There seems to be a nonlinear concave relationship between x and y. 
+
+
+c. (2 points) Use `lm()` to fit 3 models below. Print the summary tables for 3 fitted models and comment on what you find.
+
+- Model I: $Y = \beta_0 + \beta_1 X + \epsilon$
+- Model II: $Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \epsilon$
+- Model III: $Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \beta_3 X^3 + \epsilon$
+
+```{r}
+library(purrr)
+
+models <- tibble(
+  equation = list(
+    formula(y ~ x),
+    formula(y ~ x + I(x^2)),
+    formula(y ~ x + I(x^2) + I(x^3))
+  )
+)
+
+models <- models %>% mutate(
+  fit = map(equation, ~ .x %>% lm()),
+  summary = map(fit, ~ .x %>% summary())
+)
+
+models$summary
+```
+
+* In the first model x is not significant and the $R^2$ is low.
+
+* In the second model x and $x^2$ are significant and the $R^2$ is higher.
+
+* In the third model x and $x^2$are significant and the $R^2$ increases slightly 
+
+
+d. (2 points) Calculate the leave-one-out-cross-validation mean squared error for each model.
+```{r}
+library(magrittr)
+
+train_mse <- function(test_ind, data, equation) {
+  train <- data[-test_ind, ]
+  test <- data[test_ind, ]
+
+  fit <- lm(formula = equation, data = train)
+
+  pred <- predict(fit, test %>% select(x))
+  obs <- test$y
+  mse <- sum(obs - pred)^2 
+  mse
+}
+
+
+CV <- function(x, y, equation, k) {
+  set.seed(11152)
+  data <- bind_cols(x = x, y = y)
+  n <- length(x)
+
+  test_ind <- sample(seq_len(length(x))) %>% split((1:n)%%k)
+
+  test_ind %>%
+    map_dbl(~ train_mse(.x, data, equation)) %>%
+    mean()
+}
+
+
+models %>% 
+  mutate(
+         test_mse = map_dbl(equation, ~ CV(x, y, .x, 100)),
+         equation = format(equation)) %>%
+  select(equation, test_mse)
+```
+
+
+e. (2 points) Calculate the k-fold-cross-validation ($k=10$) mean squared error for each model.
+
+```{r}
+models %>%
+  mutate(
+         test_mse = map_dbl(equation, ~ CV(x, y, .x, 10)),
+         equation = format(equation)) %>%
+  select(equation, test_mse)
+```
+
+
+f. (1 point) Based on your results in (d) and (e), which model has the least cross-validation error? Briefly explain why.
+
+Based on these results we should use the second model since the LOOCV 
+is the same for the second and third model and the second model is less complex. 
+
+
+# Random Number Generation
+
+a. Simulate `N = 1000` binomial random variables $B(n = 10; p = 0.4)$ using three approaches:  inversion
+method, by simulating corresponding Bernoulli random variables by inversion method
+and using R function `rbinom`. Plot the empirical probability density functions of all
+three samples on one panel. Comment on the results.
+
+```{r}
+set.seed(11153)
+
+N = 1000; n = 10; p = 0.4
+# approach 1
+uniforms = runif(N)
+sample1 = qbinom(uniforms, n, p) 
+d1 = cumsum(table(sample1)/N)
+
+# approach 2
+uniforms = runif(N * n)
+sample2_tmp = matrix(qbinom(uniforms, 1, p), N, n)
+sample2 = apply(sample2_tmp, 1, sum)
+d2 = cumsum(table(sample2)/N)
+
+# approach 3
+sample3 = rbinom(N, n, p)
+d3 = cumsum(table(sample3)/N)
+
+plot(d1, main = "Empirial CDF of three samples", xlab = "", ylab = "cumulative probability", type = "s")
+lines(d2, col = "blue", type = "s")
+lines(d3, col = "red", type = "s")
+legend("bottomright", col = c("black", "blue", "red"), lty = 1, legend = paste("sample", 1:3, sep = ""))
+
+```
+
+The results all produce the same results with the exception of some sampling error which will decrease as N increases.
+
+
+
+b. The aim is to simulate `N = 10 000` standard normal distributed random variables
+with density $f(x) = (2\pi)^{-0.5} exp(x^2/2)$ using accept-reject method and a generator
+for uniform random variables only. As a candidate density g use the density of the
+standard Cauchy distribution $g(x) = \{\pi(1 + x^2)\}^{-1}$.
+- Choose a value of the constant $c$, such that $f(x) \leq cg(x)$. 
+- Obtain `N` standard normal random variables using the accept-reject method, generating Cauchy distributed random variables using inversion method. Compare
+estimated and theoretical acceptance probabilities. Plot a histogram of the obtained sample and add the standard normal density to the plot. Make a QQ-plot.
+Comment on the results.
+- Is it possible to simulate from the standard Cauchy density using
+the accept-reject method with a standard normal candidate density? 
+
+
+```{r}
+
+g_fun = function(x){return(1/(pi * (1 + x^2)))}
+f_fun = function(x){return((2* pi)^(-0.5) * exp(-x^2/2))}
+x = seq(-10, 10, 0.01)
+gx = g_fun(x)
+fx = f_fun(x)
+c = max(fx/gx) 
+c
+
+```
+
+```{r}
+
+set.seed(11154)
+N = 10000
+
+# Step 1 - generating Cauchy distributed random variables using inversion method
+uniforms1 = runif(N)
+cauchies = qcauchy(uniforms1)
+
+# Step 2 - generating standard normal random variables using the accept-reject method
+uniforms2 = runif(N)
+accept = uniforms2 * c * g_fun(cauchies) < f_fun(cauchies)
+normals = cauchies[accept]
+
+# Step 3 - QQplot
+qqnorm(normals)
+qqline(normals)
+```
+
+The accept-reject method works when c such that for all x, g(x)≤cf(x) can be found where g(x) and f(x) are the pdfs for a standard cauchy and a standard normal, respectively.
+Using a cauchy distribution to generate a normal distribution is possible since the ratio peaks near 0
+
+
+```{r}
+plot(x, fx/gx, type = "l", main = "normal/cauchy")
+```
+
+```{r}
+plot(x, gx/fx, type = "l", main = "cauchy/normal")
+```
+
+It’s impossible to generate a cauchy distribution using a normal distribution 
+because such c doesn’t exist for all x.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
